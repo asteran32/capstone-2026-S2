@@ -1,0 +1,7 @@
+execution:
+  allowed_languages:
+    - python
+  timeout_seconds: 5
+  network_enabled: false
+  allow_arbitrary_shell: false
+  max_output_chars: 20000

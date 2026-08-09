@@ -1,0 +1,17 @@
+experiment:
+  id: null
+  condition: FULL
+  repetitions: 1
+  seed: 42
+
+guardrails:
+  layer1:
+    enabled: true
+  layer2:
+    enabled: true
+  layer3:
+    enabled: true
+
+logging:
+  save_raw_outputs: true
+  save_state_snapshots: false

@@ -1,0 +1,24 @@
+layer1:
+  enabled: true
+
+layer2:
+  enabled: true
+
+layer3:
+  enabled: true
+
+drift_score:
+  weights:
+    boundary_violation: 0.30
+    forbidden_action_attempt: 0.30
+    role_similarity_deviation: 0.15
+    schema_violation: 0.10
+    instruction_deviation: 0.15
+
+thresholds:
+  repair: 0.30
+  reset: 0.60
+
+limits:
+  max_repair_attempts_per_turn: 2
+  max_resets_per_turn: 1
