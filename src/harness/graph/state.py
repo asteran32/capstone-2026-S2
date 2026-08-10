@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+from operator import add
+from typing import Annotated, Any, Literal, TypedDict
 
 
 AgentName = Literal["problem_designer", "code_reviewer", "test_runner"]
@@ -38,7 +39,7 @@ class HarnessState(TypedDict, total=False):
 
     drift_score: float
     drift_indicators: dict[str, float]
-    drift_history: list[dict[str, Any]]
+    drift_history: Annotated[list[dict[str, Any]], add]
 
     retry_count: int
     repair_count: int
