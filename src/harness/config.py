@@ -293,6 +293,14 @@ def load_guardrails_config(path: str | Path = "config/guardrails.yaml") -> Guard
     return GuardrailsConfig.model_validate(data)
 
 
+def load_safety_config(path: str | Path = "config/safety.yaml") -> SafetyConfig:
+    """Load standalone safety settings for graph composition."""
+
+    safety_path = Path(path)
+    data = _load_yaml_mapping(safety_path, environment=os.environ)
+    return SafetyConfig.model_validate(data)
+
+
 def load_role_configuration(path: str | Path) -> RoleConfiguration:
     """Load a role YAML mapping before M2 adds semantic contract validation."""
 
