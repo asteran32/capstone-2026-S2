@@ -8,7 +8,12 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from harness.agents import CodeReviewAgent, ProblemDesignAgent, TestRunnerAgent
-from harness.config import GuardrailsConfig, load_guardrails_config
+from harness.config import (
+    GuardrailsConfig,
+    SafetyConfig,
+    load_guardrails_config,
+    load_safety_config,
+)
 from harness.graph.nodes import (
     classify_intent_node,
     create_agent_node,
@@ -20,6 +25,7 @@ from harness.graph.nodes import (
     initialize_session,
     route_agent_node,
     select_agent_edge,
+    create_safety_validator_node,
     intervention_exhausted,
 )
 from harness.graph.state import HarnessState
@@ -27,6 +33,7 @@ from harness.guardrails.consistency import ConsistencyMonitor
 from harness.guardrails.repair import RepairManager
 from harness.guardrails.reset import ResetPolicy
 from harness.models.provider import LLMProvider
+from harness.safety.validator import SafetyValidator
 
 
 def build_mvp_graph(
@@ -34,10 +41,12 @@ def build_mvp_graph(
     *,
     checkpointer: Any | None = None,
     guardrails: GuardrailsConfig | None = None,
+    safety: SafetyConfig | None = None,
 ) -> Any:
-    """Compile the M6 graph with bounded repair and Layer 3 reset recovery."""
+    """Compile the M7 graph with recovery plus independent safety validation."""
 
     guardrail_config = guardrails or load_guardrails_config()
+    safety_config = safety or load_safety_config()
     reset_policy = ResetPolicy(guardrail_config)
     builder = StateGraph(HarnessState)
     builder.add_node("initialize_session", initialize_session)
@@ -56,6 +65,7 @@ def build_mvp_graph(
     builder.add_node("repair_output", create_repair_node(RepairManager(provider)))
     builder.add_node("reset_agent", create_reset_node(reset_policy))
     builder.add_node("intervention_exhausted", intervention_exhausted)
+    builder.add_node("safety_validator", create_safety_validator_node(SafetyValidator(safety_config)))
     builder.add_node("finalize_response", finalize_response)
 
     builder.add_edge(START, "initialize_session")
@@ -76,7 +86,7 @@ def build_mvp_graph(
         "consistency_monitor",
         create_intervention_selector(reset_policy),
         {
-            "pass": "finalize_response",
+            "pass": "safety_validator",
             "repair": "repair_output",
             "reset": "reset_agent",
             "block": "intervention_exhausted",
@@ -92,7 +102,8 @@ def build_mvp_graph(
             "test_runner": "test_runner",
         },
     )
-    builder.add_edge("intervention_exhausted", "finalize_response")
+    builder.add_edge("intervention_exhausted", "safety_validator")
+    builder.add_edge("safety_validator", "finalize_response")
     builder.add_edge("finalize_response", END)
 
     return builder.compile(checkpointer=checkpointer or InMemorySaver())

@@ -13,6 +13,7 @@ from harness.guardrails.reset import ResetPolicy
 from harness.graph.routing import classify_intent, route_for_intent
 from harness.memory.context import AgentContextMemory
 from harness.memory.projector import ContextProjector
+from harness.safety.validator import SafetyValidator
 
 
 def initialize_session(
@@ -83,8 +84,11 @@ def create_agent_node(
 
 
 def finalize_response(state: HarnessState) -> HarnessState:
-    """Expose the M4 candidate output without applying later guardrails."""
+    """Deliver a candidate only after any applicable safety validation passes."""
 
+    safety_result = state.get("safety_result")
+    if safety_result is not None and not safety_result.get("allowed", False):
+        return {"final_output": None}
     return {"final_output": state.get("candidate_output")}
 
 
@@ -229,6 +233,24 @@ def intervention_exhausted(state: HarnessState) -> HarnessState:
         "error_type": "InterventionLimitError",
         "error_message": "Configured repair/reset limit exhausted for this turn.",
     }
+
+
+def create_safety_validator_node(
+    validator: SafetyValidator,
+) -> Callable[[HarnessState], HarnessState]:
+    """Create the independent M7 safety-validation node."""
+
+    def safety_validator(state: HarnessState) -> HarnessState:
+        result = validator.validate(state.get("active_agent"), state.get("candidate_output"))
+        update: HarnessState = {"safety_result": result.model_dump(mode="json")}
+        if result.execution_result is not None:
+            update["latest_test_results"] = [
+                test_result.model_dump(mode="json")
+                for test_result in result.execution_result.test_results
+            ]
+        return update
+
+    return safety_validator
 
 
 def _task_context_for_agent(state: HarnessState, agent_id: AgentName) -> dict[str, Any]:
