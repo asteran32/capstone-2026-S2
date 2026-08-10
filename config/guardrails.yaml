@@ -8,6 +8,7 @@ layer3:
   enabled: true
 
 drift_score:
+  # Provisional engineering defaults; not validated research findings.
   weights:
     boundary_violation: 0.30
     forbidden_action_attempt: 0.30
@@ -16,6 +17,7 @@ drift_score:
     instruction_deviation: 0.15
 
 thresholds:
+  # Provisional engineering defaults; subject to later recalibration.
   repair: 0.30
   reset: 0.60
 

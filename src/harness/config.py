@@ -285,6 +285,14 @@ def load_application_config(
     )
 
 
+def load_guardrails_config(path: str | Path = "config/guardrails.yaml") -> GuardrailsConfig:
+    """Load standalone guardrail settings for graph composition."""
+
+    guardrail_path = Path(path)
+    data = _load_yaml_mapping(guardrail_path, environment=os.environ)
+    return GuardrailsConfig.model_validate(data)
+
+
 def load_role_configuration(path: str | Path) -> RoleConfiguration:
     """Load a role YAML mapping before M2 adds semantic contract validation."""
 
