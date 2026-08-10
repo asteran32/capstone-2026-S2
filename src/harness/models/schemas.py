@@ -72,6 +72,15 @@ class ExecutionResult(SchemaModel):
     stderr: str
 
 
+class SafetyResult(SchemaModel):
+    """Independent content/runtime safety decision for a candidate output."""
+
+    allowed: bool
+    violations: list[str] = Field(default_factory=list)
+    evaluator_version: str
+    execution_result: ExecutionResult | None = None
+
+
 class ConsistencyResult(SchemaModel):
     valid: bool
     role_adherence_score: float = Field(ge=0.0, le=1.0)

@@ -8,6 +8,7 @@ from harness.models.schemas import (
     ExecutionRequest,
     ExperimentObservation,
     ProblemDesignOutput,
+    SafetyResult,
 )
 
 
@@ -49,6 +50,7 @@ def test_output_schemas_validate() -> None:
     assert problem.reference_solution is None
     assert review.confidence == 0.9
     assert observation.condition == "FULL"
+    assert SafetyResult(allowed=True, evaluator_version="safety-v1").allowed is True
 
 
 def test_execution_request_rejects_unsupported_language() -> None:
