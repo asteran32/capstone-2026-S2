@@ -50,7 +50,7 @@ async def test_layer_two_monitors_each_agent_route_and_retains_raw_observation()
         assert result["candidate_output"] == result["final_output"]
 
 
-async def test_forbidden_injection_preserves_candidate_and_marks_repair() -> None:
+async def test_forbidden_injection_preserves_candidate_and_terminates_bounded_recovery() -> None:
     graph = build_mvp_graph(_provider("I will execute_code the learner program."))
 
     result = await graph.ainvoke(
@@ -58,9 +58,11 @@ async def test_forbidden_injection_preserves_candidate_and_marks_repair() -> Non
         {"configurable": {"thread_id": "m5-injection"}},
     )
 
-    assert result["guardrail_action"] == "repair"
+    assert result["guardrail_action"] == "block"
+    assert result["reset_count"] == 1
+    assert result["error_type"] == "InterventionLimitError"
     assert result["candidate_output"] == result["final_output"]
-    assert result["drift_history"][-1]["indicators"]["forbidden_action_attempt"] == 1.0
+    assert result["drift_history"][0]["indicators"]["forbidden_action_attempt"] == 1.0
 
 
 async def test_disabling_layer_two_keeps_graph_topology_and_passes_candidate() -> None:

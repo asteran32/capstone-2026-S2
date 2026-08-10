@@ -8,7 +8,10 @@ from langchain_core.runnables import RunnableConfig
 from harness.agents.base import BaseAgent
 from harness.graph.state import AgentName, HarnessState
 from harness.guardrails.consistency import ConsistencyMonitor
+from harness.guardrails.repair import RepairManager
+from harness.guardrails.reset import ResetPolicy
 from harness.graph.routing import classify_intent, route_for_intent
+from harness.memory.context import AgentContextMemory
 from harness.memory.projector import ContextProjector
 
 
@@ -24,6 +27,8 @@ def initialize_session(
         "thread_id": thread_id,
         "trace_id": str(uuid4()),
         "turn_id": int(state.get("turn_id", 0)) + 1,
+        "repair_count": int(state.get("repair_count", 0)),
+        "reset_count": int(state.get("reset_count", 0)),
     }
 
 
@@ -56,11 +61,23 @@ def create_agent_node(
     context_projector = projector or ContextProjector()
 
     async def invoke_agent(state: HarnessState) -> HarnessState:
-        projected_context = context_projector.project(state, agent_id)
+        contexts = state.get("agent_contexts", {})
+        agent_context = AgentContextMemory(
+            agent_id=agent_id, history=contexts.get(agent_id, [])
+        )
+        projected_context = context_projector.project(
+            state, agent_id, agent_context=agent_context
+        )
         output = await agent.invoke(
             _task_context_for_agent(state, agent_id), projected_context
         )
-        return {"candidate_output": output.model_dump(mode="json")}
+        candidate = output.model_dump(mode="json")
+        updated_contexts = {key: list(value) for key, value in contexts.items()}
+        updated_contexts[agent_id] = [
+            *updated_contexts.get(agent_id, []),
+            {"candidate_output": candidate},
+        ]
+        return {"candidate_output": candidate, "agent_contexts": updated_contexts}
 
     return invoke_agent
 
@@ -90,6 +107,7 @@ def create_consistency_monitor_node(
             "schema_errors": result.schema_errors,
             "action": result.recommended_action,
             "evaluator_version": result.evaluator_version,
+            "phase": state.get("monitor_phase", "initial"),
         }
         return {
             "consistency_result": result.model_dump(mode="json"),
@@ -97,21 +115,120 @@ def create_consistency_monitor_node(
             "drift_indicators": result.drift_signals,
             "drift_history": [observation],
             "guardrail_action": result.recommended_action,
+            "monitor_phase": "initial",
         }
 
     return consistency_monitor
 
 
-def select_consistency_edge(state: HarnessState) -> str:
-    """Select M5 PASS or non-mutating REPAIR continuation."""
+def create_intervention_selector(
+    reset_policy: ResetPolicy,
+) -> Callable[[HarnessState], str]:
+    """Create bounded PASS/REPAIR/RESET graph routing for M6."""
 
-    return "repair" if state.get("guardrail_action") == "repair" else "pass"
+    def select_intervention(state: HarnessState) -> str:
+        if state.get("guardrail_action") == "pass":
+            return "pass"
+        decision = reset_policy.decide(state)
+        if decision.required:
+            return "reset" if state.get("reset_count", 0) < reset_policy.max_resets else "block"
+        if state.get("guardrail_action") == "repair" and state.get(
+            "repair_count", 0
+        ) < reset_policy.max_repairs:
+            return "repair"
+        return "block"
+
+    return select_intervention
 
 
-def repair_pending(_: HarnessState) -> HarnessState:
-    """Preserve the M5 repair branch until M6 implements output repair."""
+def create_repair_node(
+    repair_manager: RepairManager,
+    *,
+    projector: ContextProjector | None = None,
+) -> Callable[[HarnessState], Any]:
+    """Create a bounded repair node that preserves the triggering candidate."""
 
-    return {}
+    context_projector = projector or ContextProjector()
+
+    async def repair_output(state: HarnessState) -> HarnessState:
+        agent_id = state["active_agent"]
+        if agent_id is None:
+            raise ValueError("Repair requires an active agent")
+        contexts = state.get("agent_contexts", {})
+        projected_context = context_projector.project(
+            state,
+            agent_id,
+            agent_context=AgentContextMemory(
+                agent_id=agent_id, history=contexts.get(agent_id, [])
+            ),
+        )
+        consistency = state.get("consistency_result") or {}
+        original_candidate = state.get("candidate_output")
+        repaired = await repair_manager.repair(
+            agent_id,
+            original_candidate=original_candidate,
+            task_context=_task_context_for_agent(state, agent_id),
+            projected_context=projected_context.model_dump(mode="json"),
+            violations=list(consistency.get("violations", [])),
+            schema_errors=list(consistency.get("schema_errors", [])),
+        )
+        repaired_candidate = repaired.model_dump(mode="json")
+        return {
+            "candidate_output": repaired_candidate,
+            "repair_count": state.get("repair_count", 0) + 1,
+            "intervention_history": [
+                {
+                    "kind": "repair",
+                    "agent_id": agent_id,
+                    "original_candidate": original_candidate,
+                    "repaired_candidate": repaired_candidate,
+                    "violations": consistency.get("violations", []),
+                    "schema_errors": consistency.get("schema_errors", []),
+                }
+            ],
+            "monitor_phase": "post_repair",
+        }
+
+    return repair_output
+
+
+def create_reset_node(reset_policy: ResetPolicy) -> Callable[[HarnessState], HarnessState]:
+    """Create selective reset that clears only the active role's context."""
+
+    def reset_agent(state: HarnessState) -> HarnessState:
+        agent_id = state["active_agent"]
+        if agent_id is None:
+            raise ValueError("Reset requires an active agent")
+        decision = reset_policy.decide(state)
+        contexts = {key: list(value) for key, value in state.get("agent_contexts", {}).items()}
+        discarded_context = contexts.get(agent_id, [])
+        contexts[agent_id] = []
+        return {
+            "agent_contexts": contexts,
+            "reset_count": state.get("reset_count", 0) + 1,
+            "intervention_history": [
+                {
+                    "kind": "reset",
+                    "agent_id": agent_id,
+                    "reason": decision.reason or "consistency_intervention",
+                    "discarded_agent_context": discarded_context,
+                    "pre_reset_consistency": state.get("consistency_result"),
+                }
+            ],
+            "monitor_phase": "post_reset",
+        }
+
+    return reset_agent
+
+
+def intervention_exhausted(state: HarnessState) -> HarnessState:
+    """Terminate bounded recovery when configured intervention limits are exhausted."""
+
+    return {
+        "guardrail_action": "block",
+        "error_type": "InterventionLimitError",
+        "error_message": "Configured repair/reset limit exhausted for this turn.",
+    }
 
 
 def _task_context_for_agent(state: HarnessState, agent_id: AgentName) -> dict[str, Any]:

@@ -29,6 +29,7 @@ class HarnessState(TypedDict, total=False):
 
     current_problem: dict[str, Any] | None
     latest_test_results: list[dict[str, Any]]
+    agent_contexts: dict[AgentName, list[dict[str, Any]]]
 
     candidate_output: dict[str, Any] | None
     final_output: dict[str, Any] | None
@@ -45,6 +46,8 @@ class HarnessState(TypedDict, total=False):
     repair_count: int
     reset_count: int
     guardrail_action: GuardrailAction | None
+    monitor_phase: Literal["initial", "post_repair", "post_reset"]
+    intervention_history: Annotated[list[dict[str, Any]], add]
 
     experiment_id: str | None
     experiment_condition: str
