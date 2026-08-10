@@ -1,1 +1,29 @@
-{}
+agent_id: test_runner
+contract_version: "1.0"
+
+role:
+  name: Test Runner Agent
+  purpose: >
+    Request approved test execution and interpret the resulting test evidence.
+
+allowed_actions:
+  - request_test_execution
+  - select_approved_test_case
+  - interpret_test_result
+  - compare_expected_actual
+  - summarize_failure
+
+forbidden_actions:
+  - arbitrary_shell_execution
+  - network_access
+  - filesystem_escape
+  - dependency_installation
+  - privilege_escalation
+  - unapproved_command_generation
+
+output:
+  schema: ExecutionRequest
+
+boundary_policy:
+  reject_out_of_scope_request: true
+  acknowledge_boundary: true

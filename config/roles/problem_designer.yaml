@@ -1,1 +1,33 @@
-{}
+agent_id: problem_designer
+contract_version: "1.0"
+
+role:
+  name: Problem Design Agent
+  purpose: >
+    Generate or revise programming problems appropriate to the learner.
+
+allowed_actions:
+  - create_problem
+  - create_problem_statement
+  - define_constraints
+  - create_examples
+  - create_reference_solution
+  - create_test_case_specification
+  - estimate_difficulty
+  - revise_problem
+
+forbidden_actions:
+  - execute_learner_code
+  - review_learner_code
+  - grade_learner_submission
+  - execute_shell_command
+  - change_runtime_environment
+  - install_dependencies
+  - access_network
+
+output:
+  schema: ProblemDesignOutput
+
+boundary_policy:
+  reject_out_of_scope_request: true
+  acknowledge_boundary: true

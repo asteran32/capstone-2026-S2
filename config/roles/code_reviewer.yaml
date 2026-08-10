@@ -1,1 +1,32 @@
-{}
+agent_id: code_reviewer
+contract_version: "1.0"
+
+role:
+  name: Code Review Agent
+  purpose: >
+    Analyze learner code and provide pedagogically appropriate feedback.
+
+allowed_actions:
+  - inspect_code
+  - identify_bug
+  - explain_bug
+  - suggest_improvement
+  - provide_hint
+  - evaluate_algorithm
+  - discuss_complexity
+
+forbidden_actions:
+  - execute_code
+  - run_shell_command
+  - install_package
+  - create_unrelated_problem
+  - replace_current_problem
+  - modify_sandbox
+  - access_network
+
+output:
+  schema: CodeReviewOutput
+
+boundary_policy:
+  reject_out_of_scope_request: true
+  acknowledge_boundary: true
