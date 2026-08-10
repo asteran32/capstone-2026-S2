@@ -74,11 +74,12 @@ class ExecutionResult(SchemaModel):
 
 class ConsistencyResult(SchemaModel):
     valid: bool
-    role_adherence_score: float
+    role_adherence_score: float = Field(ge=0.0, le=1.0)
     violations: list[str]
     drift_signals: dict[str, float]
     recommended_action: Literal["pass", "repair", "reset", "block"]
     evaluator_version: str
+    schema_errors: list[str] = Field(default_factory=list)
 
 
 class DriftObservation(SchemaModel):
