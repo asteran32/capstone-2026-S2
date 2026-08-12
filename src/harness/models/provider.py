@@ -116,9 +116,9 @@ class OpenAIProvider:
             ],
             "temperature": self._config.temperature if temperature is None else temperature,
         }
-        effective_seed = self._config.seed if seed is None else seed
-        if effective_seed is not None:
-            request["seed"] = effective_seed
+        # The Responses API does not currently accept a seed request field.
+        # Keep it in the provider protocol/config for providers that support it
+        # and for experiment metadata, but do not send it to OpenAI.
         if response_schema is not None:
             request["text"] = {
                 "format": {

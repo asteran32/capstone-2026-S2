@@ -76,7 +76,7 @@ async def test_openai_provider_uses_configured_structured_request_and_usage() ->
     request = responses.requests[0]
     assert request["model"] == "test-model"
     assert request["temperature"] == 0.3
-    assert request["seed"] == 17
+    assert "seed" not in request
     assert request["input"] == [{"role": "developer", "content": "policy"}]
     assert request["text"] == {
         "format": {

@@ -1,14 +1,34 @@
-"""Run one M4 graph session with a mock provider by default."""
+"""Run one graph session with either the mock or OpenAI provider.
+
+Quick start (from the project root)::
+
+    ./.venv/bin/python scripts/run_session.py "두 정수의 합 문제를 만들어 줘"
+    ./.venv/bin/python scripts/run_session.py "내 코드를 검토해 줘" \
+        --learner-code "print(1 + 2)"
+    OPENAI_API_KEY=... MODEL_NAME=... ./.venv/bin/python \
+        scripts/run_session.py "두 정수의 합 문제를 만들어 줘" --provider openai
+
+The mock provider is the default and does not call an external API. Use
+``--provider openai`` explicitly to make a real, potentially billable request.
+"""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+import os
+from pathlib import Path
 from typing import Any
 
+from harness.config import ConfigurationError, load_application_config
 from harness.graph import build_mvp_graph
-from harness.models.provider import MockProvider
+from harness.models.provider import (
+    LLMInvocationError,
+    LLMProvider,
+    MockProvider,
+    OpenAIProvider,
+)
 
 
 def _mock_provider() -> MockProvider:
@@ -40,8 +60,38 @@ def _mock_provider() -> MockProvider:
     )
 
 
-async def _run(message: str, thread_id: str, learner_code: str | None) -> dict[str, Any]:
-    graph = build_mvp_graph(_mock_provider())
+def _create_provider(
+    provider_name: str,
+    *,
+    config_dir: str | Path = "config",
+    environment: dict[str, str] | None = None,
+) -> LLMProvider:
+    """Create the explicitly selected provider without exposing credentials."""
+
+    if provider_name == "mock":
+        return _mock_provider()
+
+    resolved_environment = os.environ if environment is None else environment
+    if not resolved_environment.get("OPENAI_API_KEY", "").strip():
+        raise ConfigurationError(
+            "OPENAI_API_KEY is required when --provider openai is selected"
+        )
+
+    config = load_application_config(config_dir, environment=resolved_environment)
+    if config.models.provider != "openai":
+        raise ConfigurationError(
+            "config/models.yaml must set provider: openai when --provider openai is selected"
+        )
+    return OpenAIProvider(config.models)
+
+
+async def _run(
+    message: str,
+    thread_id: str,
+    learner_code: str | None,
+    provider: LLMProvider,
+) -> dict[str, Any]:
+    graph = build_mvp_graph(provider)
     return await graph.ainvoke(
         {"user_message": message, "learner_code": learner_code},
         {"configurable": {"thread_id": thread_id}},
@@ -49,12 +99,43 @@ async def _run(message: str, thread_id: str, learner_code: str | None) -> dict[s
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run one M4 mock-provider session.")
-    parser.add_argument("message", help="Learner request to route through the graph.")
-    parser.add_argument("--thread-id", default="demo-session")
-    parser.add_argument("--learner-code")
+    parser = argparse.ArgumentParser(
+        description="Run one graph session using the mock or OpenAI provider.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  %(prog)s "두 정수의 합 문제를 만들어 줘"
+  %(prog)s "내 코드를 검토해 줘" --learner-code "print(1 + 2)"
+  %(prog)s "테스트해 줘" --thread-id experiment-01 --learner-code "print('hello')"
+  %(prog)s "두 정수의 합 문제를 만들어 줘" --provider openai
+""",
+    )
+    parser.add_argument(
+        "message",
+        help="그래프에 전달할 학습자 요청 문장입니다. (필수)",
+    )
+    parser.add_argument(
+        "--thread-id",
+        default="demo-session",
+        help="세션을 구분하는 식별자입니다. 기본값: demo-session",
+    )
+    parser.add_argument(
+        "--learner-code",
+        help="검토 또는 테스트할 학습자 Python 코드입니다. 생략할 수 있습니다.",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=("mock", "openai"),
+        default="mock",
+        help="사용할 LLM provider입니다. 기본값: mock",
+    )
     arguments = parser.parse_args()
-    result = asyncio.run(_run(arguments.message, arguments.thread_id, arguments.learner_code))
+    try:
+        provider = _create_provider(arguments.provider)
+        result = asyncio.run(
+            _run(arguments.message, arguments.thread_id, arguments.learner_code, provider)
+        )
+    except (ConfigurationError, LLMInvocationError) as error:
+        parser.error(str(error))
     print(json.dumps(result["final_output"], indent=2, sort_keys=True))
 
 
