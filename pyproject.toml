@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
     "langchain-core",
     "langgraph",
+    "langgraph-checkpoint-sqlite",
     "openai",
     "pydantic",
     "PyYAML",

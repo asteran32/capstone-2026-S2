@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from harness.config import ConfigurationError, load_application_config, load_role_configuration
+from harness.config import (
+    ConfigurationError,
+    PersistenceConfig,
+    load_application_config,
+    load_role_configuration,
+)
 
 
 def _write_valid_config(config_dir: Path) -> None:
@@ -66,6 +71,7 @@ def test_valid_config_loads(tmp_path: Path) -> None:
     assert config.experiment.experiment.condition == "FULL"
     assert config.guardrails.thresholds.reset == 0.60
     assert config.safety.execution.allowed_languages == ["python"]
+    assert config.experiment.persistence.backend == "memory"
 
 
 def test_checked_in_config_loads_with_model_environment() -> None:
@@ -92,3 +98,10 @@ def test_invalid_role_configuration_fails_clearly(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigurationError, match="must be a YAML mapping"):
         load_role_configuration(role_path)
+
+
+def test_sqlite_persistence_requires_a_durable_path() -> None:
+    with pytest.raises(ValueError, match="sqlite_path is required"):
+        PersistenceConfig(backend="sqlite")
+    with pytest.raises(ValueError, match="cannot be :memory:"):
+        PersistenceConfig(backend="sqlite", sqlite_path=":memory:")

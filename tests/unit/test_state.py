@@ -15,6 +15,7 @@ def test_harness_state_contract() -> None:
         "trace_id",
         "active_agent",
         "candidate_output",
+        "candidate_output_id",
         "drift_indicators",
         "guardrail_action",
         "experiment_condition",

@@ -15,3 +15,8 @@ guardrails:
 logging:
   save_raw_outputs: true
   save_state_snapshots: false
+  trace_dir: data/traces
+
+persistence:
+  backend: memory
+  sqlite_path: null

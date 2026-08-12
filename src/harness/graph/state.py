@@ -32,6 +32,7 @@ class HarnessState(TypedDict, total=False):
     agent_contexts: dict[AgentName, list[dict[str, Any]]]
 
     candidate_output: dict[str, Any] | None
+    candidate_output_id: str | None
     final_output: dict[str, Any] | None
 
     role_contract_result: dict[str, Any] | None

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 import yaml
 from pydantic import (
@@ -133,6 +133,24 @@ class LoggingConfig(BaseModel):
 
     save_raw_outputs: bool
     save_state_snapshots: bool
+    trace_dir: str = Field(default="data/traces", min_length=1)
+
+
+class PersistenceConfig(BaseModel):
+    """Checkpoint backend selected at application composition time."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    backend: Literal["memory", "sqlite"] = "memory"
+    sqlite_path: str | None = None
+
+    @model_validator(mode="after")
+    def sqlite_backend_requires_file_path(self) -> "PersistenceConfig":
+        if self.backend == "sqlite" and not self.sqlite_path:
+            raise ValueError("sqlite_path is required when persistence backend is sqlite")
+        if self.sqlite_path == ":memory:":
+            raise ValueError("sqlite_path must be durable and cannot be :memory:")
+        return self
 
 
 class ExperimentConfig(BaseModel):
@@ -143,6 +161,7 @@ class ExperimentConfig(BaseModel):
     experiment: ExperimentMetadataConfig
     guardrails: ExperimentGuardrailsConfig
     logging: LoggingConfig
+    persistence: PersistenceConfig = Field(default_factory=PersistenceConfig)
 
 
 class ExecutionSafetyConfig(BaseModel):
