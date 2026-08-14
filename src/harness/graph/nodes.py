@@ -4,6 +4,7 @@ from typing import Any, Callable, Mapping
 from uuid import uuid4
 
 from langchain_core.runnables import RunnableConfig
+from pydantic import BaseModel
 
 from harness.agents.base import BaseAgent
 from harness.graph.state import AgentName, HarnessState
@@ -107,7 +108,7 @@ def create_agent_node(
         output = await agent.invoke(
             _task_context_for_agent(state, agent_id), projected_context
         )
-        candidate = output.model_dump(mode="json")
+        candidate = _serialize_candidate(output)
         updated_contexts = {key: list(value) for key, value in contexts.items()}
         updated_contexts[agent_id] = [
             *updated_contexts.get(agent_id, []),
@@ -255,7 +256,7 @@ def create_repair_node(
             violations=list(consistency.get("violations", [])),
             schema_errors=list(consistency.get("schema_errors", [])),
         )
-        repaired_candidate = repaired.model_dump(mode="json")
+        repaired_candidate = _serialize_candidate(repaired)
         update: HarnessState = {
             "candidate_output": repaired_candidate,
             "candidate_output_id": str(uuid4()),
@@ -419,3 +420,22 @@ def _task_context_for_agent(state: HarnessState, agent_id: AgentName) -> dict[st
         "source_code": state.get("learner_code") or "",
         "available_test_cases": state.get("latest_test_results", []),
     }
+
+
+def _serialize_candidate(output: BaseModel) -> dict[str, Any]:
+    """Preserve the public top-level shape while omitting absent nested details."""
+
+    payload = output.model_dump(mode="json")
+
+    def prune_nested(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: prune_nested(item)
+                for key, item in value.items()
+                if item is not None
+            }
+        if isinstance(value, list):
+            return [prune_nested(item) for item in value]
+        return value
+
+    return {key: prune_nested(value) for key, value in payload.items()}

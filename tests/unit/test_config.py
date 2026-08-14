@@ -78,6 +78,7 @@ def test_checked_in_config_loads_with_model_environment() -> None:
     config = load_application_config(environment={"MODEL_NAME": "test-model"})
 
     assert config.models.model_name == "test-model"
+    assert config.models.temperature is None
     assert config.guardrails.drift_score.weights.boundary_violation == 0.30
 
 

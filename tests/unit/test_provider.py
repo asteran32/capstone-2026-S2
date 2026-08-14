@@ -78,14 +78,16 @@ async def test_openai_provider_uses_configured_structured_request_and_usage() ->
     assert request["temperature"] == 0.3
     assert "seed" not in request
     assert request["input"] == [{"role": "developer", "content": "policy"}]
-    assert request["text"] == {
-        "format": {
-            "type": "json_schema",
-            "name": "CodeReviewOutput",
-            "schema": CodeReviewOutput.model_json_schema(),
-            "strict": True,
-        }
-    }
+    response_format = request["text"]["format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["name"] == "CodeReviewOutput"
+    assert response_format["strict"] is True
+    schema = response_format["schema"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    issue_schema = schema["$defs"]["DetectedIssue"]
+    assert issue_schema["additionalProperties"] is False
+    assert set(issue_schema["required"]) == set(issue_schema["properties"])
     assert result.output == {"confidence": 0.9}
     assert result.token_usage is not None
     assert result.token_usage.total_tokens == 18
@@ -97,3 +99,30 @@ async def test_openai_provider_normalizes_provider_errors() -> None:
 
     with pytest.raises(LLMInvocationError, match="OpenAI generation failed"):
         await provider.generate([], CodeReviewOutput)
+
+
+async def test_openai_provider_omits_unconfigured_temperature() -> None:
+    responses = _FakeResponses(SimpleNamespace(output_text="OK", usage=None))
+    config = ModelConfig(provider="openai", model_name="reasoning-model")
+    provider = OpenAIProvider(config, client=SimpleNamespace(responses=responses))
+
+    await provider.generate([{"role": "user", "content": "Reply OK"}])
+
+    assert "temperature" not in responses.requests[0]
+
+
+async def test_openai_provider_reports_safe_status_and_code() -> None:
+    class ProviderError(RuntimeError):
+        status_code = 400
+        code = "invalid_json_schema"
+
+    responses = _FakeResponses(ProviderError("request included sk-secret-value"))
+    provider = OpenAIProvider(_openai_config(), client=SimpleNamespace(responses=responses))
+
+    with pytest.raises(
+        LLMInvocationError,
+        match=r"OpenAI generation failed \(status=400, code=invalid_json_schema\)",
+    ) as captured:
+        await provider.generate([], CodeReviewOutput)
+
+    assert "sk-secret-value" not in str(captured.value)

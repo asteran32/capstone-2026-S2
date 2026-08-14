@@ -31,7 +31,12 @@ from harness.graph.nodes import (
     intervention_exhausted,
 )
 from harness.graph.state import HarnessState
-from harness.graph.persistence import PersistenceError, create_async_checkpointer, create_checkpointer
+from harness.graph.persistence import (
+    ManagedAsyncGraph,
+    PersistenceError,
+    create_async_checkpointer,
+    create_checkpointer,
+)
 from harness.guardrails.consistency import ConsistencyMonitor
 from harness.guardrails.contracts import RoleContractLoader
 from harness.guardrails.repair import RepairManager
@@ -168,10 +173,11 @@ async def build_mvp_graph_async(
     """Compose the same graph with an async SQLite saver when configured."""
 
     resolved_checkpointer = checkpointer
+    owns_checkpointer = resolved_checkpointer is None
     if resolved_checkpointer is None:
         resolved_persistence = persistence or PersistenceConfig()
         resolved_checkpointer = await create_async_checkpointer(resolved_persistence)
-    return build_mvp_graph(
+    graph = build_mvp_graph(
         provider,
         checkpointer=resolved_checkpointer,
         guardrails=guardrails,
@@ -181,6 +187,9 @@ async def build_mvp_graph_async(
         model_config=model_config,
         trace_dir=trace_dir,
     )
+    if owns_checkpointer and getattr(resolved_checkpointer, "conn", None) is not None:
+        return ManagedAsyncGraph(graph, resolved_checkpointer)
+    return graph
 
 
 def _model_configuration(

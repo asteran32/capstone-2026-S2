@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol, runtime_checkable
 
@@ -114,8 +115,12 @@ class OpenAIProvider:
                 }
                 for message in messages
             ],
-            "temperature": self._config.temperature if temperature is None else temperature,
         }
+        resolved_temperature = (
+            self._config.temperature if temperature is None else temperature
+        )
+        if resolved_temperature is not None:
+            request["temperature"] = resolved_temperature
         # The Responses API does not currently accept a seed request field.
         # Keep it in the provider protocol/config for providers that support it
         # and for experiment metadata, but do not send it to OpenAI.
@@ -124,7 +129,7 @@ class OpenAIProvider:
                 "format": {
                     "type": "json_schema",
                     "name": response_schema.__name__,
-                    "schema": response_schema.model_json_schema(),
+                    "schema": _strict_json_schema(response_schema),
                     "strict": True,
                 }
             }
@@ -132,7 +137,7 @@ class OpenAIProvider:
         try:
             response = await self._client.responses.create(**request)
         except Exception as error:
-            raise LLMInvocationError("OpenAI generation failed") from error
+            raise LLMInvocationError(_safe_provider_error(error)) from error
 
         output: Any = getattr(response, "output_text", None)
         if response_schema is not None and isinstance(output, str):
@@ -159,3 +164,47 @@ def _extract_token_usage(response: Any) -> TokenUsage | None:
         output_tokens=get_value("output_tokens") or get_value("completion_tokens"),
         total_tokens=get_value("total_tokens"),
     )
+
+
+def _strict_json_schema(response_schema: type[BaseModel]) -> dict[str, Any]:
+    """Return the closed, fully-required subset expected by Structured Outputs."""
+
+    schema = deepcopy(response_schema.model_json_schema())
+
+    def normalize(value: Any) -> None:
+        if isinstance(value, dict):
+            value.pop("default", None)
+            if value.get("type") == "object" or "properties" in value:
+                properties = value.get("properties", {})
+                value["additionalProperties"] = False
+                value["required"] = list(properties)
+            for child in value.values():
+                normalize(child)
+        elif isinstance(value, list):
+            for child in value:
+                normalize(child)
+
+    normalize(schema)
+    return schema
+
+
+def _safe_provider_error(error: Exception) -> str:
+    """Expose actionable provider metadata without echoing request credentials."""
+
+    details: list[str] = []
+    status_code = getattr(error, "status_code", None)
+    if isinstance(status_code, int):
+        details.append(f"status={status_code}")
+
+    error_code = getattr(error, "code", None)
+    if error_code is None:
+        body = getattr(error, "body", None)
+        if isinstance(body, Mapping):
+            nested = body.get("error", body)
+            if isinstance(nested, Mapping):
+                error_code = nested.get("code")
+    if isinstance(error_code, str) and error_code:
+        details.append(f"code={error_code}")
+
+    suffix = f" ({', '.join(details)})" if details else ""
+    return f"OpenAI generation failed{suffix}"

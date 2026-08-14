@@ -9,7 +9,12 @@ import time
 from pathlib import Path
 
 from harness.config import ExecutionSafetyConfig
-from harness.models.schemas import ExecutionRequest, ExecutionResult, TestCaseResult
+from harness.models.schemas import (
+    ExecutionRequest,
+    ExecutionResult,
+    TestCaseResult,
+    TestCaseSpecification,
+)
 from harness.safety.whitelist import ExecutionWhitelist
 
 
@@ -44,14 +49,14 @@ class SandboxExecutor:
             runner_path.write_text(
                 _runner_source(network_enabled=self._config.network_enabled), encoding="utf-8"
             )
-            test_cases = request.test_cases or [{"name": "execution"}]
+            test_cases = request.test_cases or [TestCaseSpecification(name="execution")]
             for index, test_case in enumerate(test_cases):
-                case_name = str(test_case.get("name", f"case-{index + 1}"))
+                case_name = test_case.name or f"case-{index + 1}"
                 try:
                     completed = subprocess.run(
                         [sys.executable, "-I", str(runner_path), str(source_path)],
                         cwd=sandbox_dir,
-                        input=str(test_case.get("input", "")),
+                        input=test_case.input or "",
                         text=True,
                         capture_output=True,
                         timeout=request.timeout_seconds,
@@ -134,9 +139,8 @@ def _runner_source(*, network_enabled: bool) -> str:
     return """from pathlib import Path\nimport socket\nimport sys\n\ndef _network_disabled(*args, **kwargs):\n    raise PermissionError('sandbox network access is disabled')\n\nsocket.socket = _network_disabled\nsocket.create_connection = _network_disabled\nsource = Path(sys.argv[1])\nexec(compile(source.read_text(encoding='utf-8'), str(source), 'exec'))\n"""
 
 
-def _expected_output(test_case: dict) -> str | None:
-    expected = test_case.get("expected", test_case.get("output"))
-    return None if expected is None else str(expected)
+def _expected_output(test_case: TestCaseSpecification) -> str | None:
+    return test_case.expected
 
 
 def _limit_output(value: str, maximum: int) -> str:

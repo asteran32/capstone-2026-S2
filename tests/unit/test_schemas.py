@@ -61,3 +61,22 @@ def test_execution_request_rejects_unsupported_language() -> None:
             test_cases=[],
             timeout_seconds=5,
         )
+
+
+@pytest.mark.parametrize(
+    "schema_type", [ProblemDesignOutput, CodeReviewOutput, ExecutionRequest]
+)
+def test_agent_output_schemas_use_closed_nested_objects(schema_type: type) -> None:
+    schema = schema_type.model_json_schema()
+
+    def assert_closed(value: object) -> None:
+        if isinstance(value, dict):
+            if value.get("type") == "object" or "properties" in value:
+                assert value.get("additionalProperties") is False
+            for child in value.values():
+                assert_closed(child)
+        elif isinstance(value, list):
+            for child in value:
+                assert_closed(child)
+
+    assert_closed(schema)

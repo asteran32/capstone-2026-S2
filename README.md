@@ -35,7 +35,18 @@ export MODEL_NAME="your-model-id"
 
 The script reads these values from the process environment; it does not load a
 `.env` file automatically. Real API requests may incur usage charges. Never
-commit an API key to this repository.
+commit an API key to this repository. `temperature` is optional in
+`config/models.yaml`; leave it as `null` for models that do not support that
+request parameter.
+
+Async graphs that create a durable SQLite checkpointer own that connection.
+Use the returned graph as an async context manager, or call `await graph.aclose()`
+when the application finishes:
+
+```python
+async with await build_mvp_graph_async(provider, persistence=config) as graph:
+    result = await graph.ainvoke(input_state, run_config)
+```
 
 For code review, pass learner code as a separate argument:
 

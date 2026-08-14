@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import sqlite3
 from pathlib import Path
@@ -17,6 +18,38 @@ _LOGGER = logging.getLogger(__name__)
 
 class PersistenceError(RuntimeError):
     """Raised when the configured checkpoint backend cannot be created."""
+
+
+class ManagedAsyncGraph:
+    """Delegate to a compiled graph while owning its async checkpointer resource."""
+
+    def __init__(self, graph: Any, checkpointer: Any) -> None:
+        self._graph = graph
+        self._checkpointer = checkpointer
+        self._closed = False
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._graph, name)
+
+    async def __aenter__(self) -> "ManagedAsyncGraph":
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        """Close an owned async database connection exactly once."""
+
+        if self._closed:
+            return
+        self._closed = True
+        connection = getattr(self._checkpointer, "conn", None)
+        close = getattr(connection, "close", None)
+        if close is None:
+            return
+        result = close()
+        if inspect.isawaitable(result):
+            await result
 
 
 def create_checkpointer(config: PersistenceConfig | None = None) -> Any:

@@ -21,14 +21,29 @@ class ProblemDesignInput(SchemaModel):
     relevant_context: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ProblemExample(SchemaModel):
+    """Concrete example included in a generated programming problem."""
+
+    input: str
+    output: str
+
+
+class TestCaseSpecification(SchemaModel):
+    """A closed test-case description suitable for strict structured output."""
+
+    name: str
+    input: str | None = None
+    expected: str | None = None
+
+
 class ProblemDesignOutput(SchemaModel):
     problem_id: str
     title: str
     statement: str
     constraints: list[str]
-    examples: list[dict[str, Any]]
+    examples: list[ProblemExample]
     reference_solution: str | None = None
-    test_specification: list[dict[str, Any]]
+    test_specification: list[TestCaseSpecification]
     difficulty: str
 
 
@@ -40,9 +55,17 @@ class CodeReviewInput(SchemaModel):
     relevant_context: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class DetectedIssue(SchemaModel):
+    """One bounded issue reported by the code-review role."""
+
+    kind: str
+    description: str | None = None
+    line: int | None = None
+
+
 class CodeReviewOutput(SchemaModel):
     correctness_analysis: str
-    detected_issues: list[dict[str, Any]]
+    detected_issues: list[DetectedIssue]
     hints: list[str]
     pedagogical_feedback: str
     confidence: float
@@ -51,7 +74,7 @@ class CodeReviewOutput(SchemaModel):
 class ExecutionRequest(SchemaModel):
     language: Literal["python"]
     source_code: str
-    test_cases: list[dict[str, Any]]
+    test_cases: list[TestCaseSpecification]
     timeout_seconds: int = Field(gt=0)
 
 

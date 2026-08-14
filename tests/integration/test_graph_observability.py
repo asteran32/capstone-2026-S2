@@ -124,19 +124,42 @@ async def test_sqlite_checkpoint_recovers_a_thread_in_a_new_graph(tmp_path: Path
         trace_logger=JSONLTraceLogger(tmp_path / "first-traces"),
     )
 
-    first_result = await first_graph.ainvoke(
-        {"user_message": "Give me a new problem."}, config
-    )
+    try:
+        first_result = await first_graph.ainvoke(
+            {"user_message": "Give me a new problem."}, config
+        )
+    finally:
+        await first_graph.aclose()
     resumed_graph = await build_mvp_graph_async(
         _valid_problem_provider(),
         persistence=persistence,
         trace_logger=JSONLTraceLogger(tmp_path / "resumed-traces"),
     )
-    resumed_result = await resumed_graph.ainvoke(
-        {"user_message": "Give me another new problem."}, config
-    )
+    try:
+        resumed_result = await resumed_graph.ainvoke(
+            {"user_message": "Give me another new problem."}, config
+        )
+    finally:
+        await resumed_graph.aclose()
 
     assert first_result["session_id"] == "m8-durable-thread"
     assert resumed_result["session_id"] == first_result["session_id"]
     assert resumed_result["turn_id"] == first_result["turn_id"] + 1
     assert resumed_result["thread_id"] == "m8-durable-thread"
+
+
+async def test_sqlite_graph_supports_managed_async_lifecycle(tmp_path: Path) -> None:
+    persistence = PersistenceConfig(
+        backend="sqlite", sqlite_path=str(tmp_path / "managed.sqlite")
+    )
+
+    async with await build_mvp_graph_async(
+        _valid_problem_provider(), persistence=persistence
+    ) as graph:
+        result = await graph.ainvoke(
+            {"user_message": "Give me a new problem."},
+            {"configurable": {"thread_id": "managed-thread"}},
+        )
+
+    assert result["thread_id"] == "managed-thread"
+    await graph.aclose()

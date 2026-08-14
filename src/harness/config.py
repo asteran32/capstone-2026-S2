@@ -29,7 +29,7 @@ class ModelConfig(BaseModel):
 
     provider: str = Field(min_length=1)
     model_name: str = Field(min_length=1)
-    temperature: float = Field(ge=0.0, le=2.0)
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     seed: int | None = None
 
 

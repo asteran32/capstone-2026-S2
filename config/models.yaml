@@ -1,4 +1,4 @@
 provider: openai
 model_name: ${MODEL_NAME}
-temperature: 0.0
+temperature: null
 seed: 42
