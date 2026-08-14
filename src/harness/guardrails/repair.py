@@ -28,10 +28,15 @@ class RepairManager:
     """Requests a schema-valid correction without introducing a fourth role agent."""
 
     def __init__(
-        self, provider: LLMProvider, *, contract_loader: RoleContractLoader | None = None
+        self,
+        provider: LLMProvider,
+        *,
+        contract_loader: RoleContractLoader | None = None,
+        role_contract_enabled: bool = True,
     ) -> None:
         self._provider = provider
         self._contract_loader = contract_loader or RoleContractLoader()
+        self._role_contract_enabled = role_contract_enabled
 
     async def repair(
         self,
@@ -61,7 +66,7 @@ class RepairManager:
             ),
         }
         messages = build_agent_prompt(
-            contract,
+            contract if self._role_contract_enabled else None,
             task_context=repair_context,
             projected_context=projected_context,
             output_schema=output_schema,

@@ -113,7 +113,7 @@ class RoleContractLoader:
 
 
 def build_agent_prompt(
-    role_contract: RoleContract,
+    role_contract: RoleContract | None,
     task_context: Mapping[str, Any],
     projected_context: Mapping[str, Any],
     output_schema: str | type[Any],
@@ -121,21 +121,29 @@ def build_agent_prompt(
     """Build a provider-neutral instruction sequence without invoking an LLM."""
 
     schema_name = output_schema if isinstance(output_schema, str) else output_schema.__name__
-    contract_text = json.dumps(
-        role_contract.model_dump(mode="json", by_alias=True), sort_keys=True
-    )
     task_text = json.dumps(dict(task_context), sort_keys=True, default=str)
     context_text = json.dumps(dict(projected_context), sort_keys=True, default=str)
+
+    if role_contract is None:
+        system_content = (
+            "BASE_AGENT_POLICY\n"
+            "Complete only the current task and return the required structured output."
+        )
+    else:
+        contract_text = json.dumps(
+            role_contract.model_dump(mode="json", by_alias=True), sort_keys=True
+        )
+        system_content = (
+            "BASE_AGENT_POLICY\n"
+            "Act only within the supplied role contract. Do not claim actions "
+            "outside its allowed actions.\n\n"
+            f"ROLE_CONTRACT\n{contract_text}"
+        )
 
     return [
         {
             "role": "system",
-            "content": (
-                "BASE_AGENT_POLICY\n"
-                "Act only within the supplied role contract. Do not claim actions "
-                "outside its allowed actions.\n\n"
-                f"ROLE_CONTRACT\n{contract_text}"
-            ),
+            "content": system_content,
         },
         {
             "role": "user",

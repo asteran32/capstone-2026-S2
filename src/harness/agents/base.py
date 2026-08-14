@@ -29,9 +29,11 @@ class BaseAgent(Generic[OutputModel]):
         provider: LLMProvider,
         *,
         contract_loader: RoleContractLoader | None = None,
+        role_contract_enabled: bool = True,
     ) -> None:
         self._provider = provider
         self._contract_loader = contract_loader or RoleContractLoader()
+        self._role_contract_enabled = role_contract_enabled
 
     async def invoke(
         self,
@@ -40,7 +42,11 @@ class BaseAgent(Generic[OutputModel]):
     ) -> OutputModel:
         """Generate and validate a role-scoped candidate output."""
 
-        contract = self._contract_loader.load(self.agent_id)
+        contract = (
+            self._contract_loader.load(self.agent_id)
+            if self._role_contract_enabled
+            else None
+        )
         prompt = build_agent_prompt(
             role_contract=contract,
             task_context=_to_mapping(task_context),

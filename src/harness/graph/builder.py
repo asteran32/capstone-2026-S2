@@ -1,4 +1,4 @@
-"""Construction of the executable graph and its M8 infrastructure."""
+"""Construction of the executable graph and its M9-configurable infrastructure."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def build_mvp_graph(
     model_config: ModelConfig | None = None,
     trace_dir: str = "data/traces",
 ) -> Any:
-    """Compile the M8 graph with injected persistence and observability services."""
+    """Compile the fixed-topology graph with injected M9 layer configuration."""
 
     if checkpointer is None and persistence is not None and persistence.backend == "sqlite":
         message = "Use await build_mvp_graph_async(..., persistence=...) for SQLite persistence"
@@ -72,10 +72,14 @@ def build_mvp_graph(
     safety_config = safety or load_safety_config()
     reset_policy = ResetPolicy(guardrail_config)
     contract_loader = RoleContractLoader()
-    contract_versions = {
-        agent_id: contract_loader.contract_version(agent_id)
-        for agent_id in ("problem_designer", "code_reviewer", "test_runner")
-    }
+    contract_versions = (
+        {
+            agent_id: contract_loader.contract_version(agent_id)
+            for agent_id in ("problem_designer", "code_reviewer", "test_runner")
+        }
+        if guardrail_config.layer1.enabled
+        else {}
+    )
     recorder = TraceRecorder(
         trace_logger or JSONLTraceLogger(trace_dir),
         metrics_collector or MetricsCollector(),
@@ -90,21 +94,47 @@ def build_mvp_graph(
     builder.add_node("route_agent", lambda state: route_agent_node(state, recorder=recorder))
     builder.add_node(
         "problem_designer",
-        create_agent_node(ProblemDesignAgent(provider), "problem_designer", recorder=recorder),
+        create_agent_node(
+            ProblemDesignAgent(
+                provider, role_contract_enabled=guardrail_config.layer1.enabled
+            ),
+            "problem_designer",
+            recorder=recorder,
+        ),
     )
     builder.add_node(
         "code_reviewer",
-        create_agent_node(CodeReviewAgent(provider), "code_reviewer", recorder=recorder),
+        create_agent_node(
+            CodeReviewAgent(
+                provider, role_contract_enabled=guardrail_config.layer1.enabled
+            ),
+            "code_reviewer",
+            recorder=recorder,
+        ),
     )
     builder.add_node(
         "test_runner",
-        create_agent_node(TestRunnerAgent(provider), "test_runner", recorder=recorder),
+        create_agent_node(
+            TestRunnerAgent(
+                provider, role_contract_enabled=guardrail_config.layer1.enabled
+            ),
+            "test_runner",
+            recorder=recorder,
+        ),
     )
     builder.add_node(
         "consistency_monitor",
         create_consistency_monitor_node(ConsistencyMonitor(guardrail_config), recorder=recorder),
     )
-    builder.add_node("repair_output", create_repair_node(RepairManager(provider), recorder=recorder))
+    builder.add_node(
+        "repair_output",
+        create_repair_node(
+            RepairManager(
+                provider, role_contract_enabled=guardrail_config.layer1.enabled
+            ),
+            recorder=recorder,
+        ),
+    )
     builder.add_node("reset_agent", create_reset_node(reset_policy, recorder=recorder))
     builder.add_node(
         "intervention_exhausted", lambda state: intervention_exhausted(state, recorder=recorder)

@@ -17,6 +17,8 @@ from pydantic import (
     model_validator,
 )
 
+from harness.experiments.conditions import ExperimentCondition
+
 
 class ConfigurationError(Exception):
     """Raised when application configuration cannot be loaded or validated."""
@@ -100,6 +102,7 @@ class GuardrailsConfig(BaseModel):
     layer1: LayerConfig
     layer2: LayerConfig
     layer3: LayerConfig
+    passive_measurement: bool = False
     drift_score: DriftScoreConfig
     thresholds: DriftThresholdsConfig
     limits: GuardrailLimitsConfig
@@ -111,7 +114,7 @@ class ExperimentMetadataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str | None = None
-    condition: str = Field(min_length=1)
+    condition: ExperimentCondition
     repetitions: int = Field(ge=1)
     seed: int | None = None
 
@@ -162,6 +165,21 @@ class ExperimentConfig(BaseModel):
     guardrails: ExperimentGuardrailsConfig
     logging: LoggingConfig
     persistence: PersistenceConfig = Field(default_factory=PersistenceConfig)
+
+    @model_validator(mode="after")
+    def condition_matches_layer_flags(self) -> "ExperimentConfig":
+        expected = self.experiment.condition.layer_flags
+        actual = {
+            "layer1": self.guardrails.layer1.enabled,
+            "layer2": self.guardrails.layer2.enabled,
+            "layer3": self.guardrails.layer3.enabled,
+        }
+        if actual != expected:
+            raise ValueError(
+                f"condition {self.experiment.condition.value} requires layer flags "
+                f"{expected}, received {actual}"
+            )
+        return self
 
 
 class ExecutionSafetyConfig(BaseModel):
@@ -310,6 +328,21 @@ def load_guardrails_config(path: str | Path = "config/guardrails.yaml") -> Guard
     guardrail_path = Path(path)
     data = _load_yaml_mapping(guardrail_path, environment=os.environ)
     return GuardrailsConfig.model_validate(data)
+
+
+def load_experiment_config(
+    path: str | Path = "config/experiment.yaml",
+    *,
+    environment: Mapping[str, str] | None = None,
+) -> ExperimentConfig:
+    """Load and validate the standalone M9 experiment configuration."""
+
+    experiment_path = Path(path)
+    data = _load_yaml_mapping(
+        experiment_path,
+        environment=os.environ if environment is None else environment,
+    )
+    return _validate_config(ExperimentConfig, data, experiment_path)  # type: ignore[return-value]
 
 
 def load_safety_config(path: str | Path = "config/safety.yaml") -> SafetyConfig:

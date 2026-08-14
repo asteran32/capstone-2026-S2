@@ -7,6 +7,9 @@ layer2:
 layer3:
   enabled: true
 
+# Allows drift observations without Layer 2 modifying candidate output.
+passive_measurement: false
+
 drift_score:
   # Provisional engineering defaults; not validated research findings.
   weights:

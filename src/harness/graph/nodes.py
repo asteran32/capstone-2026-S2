@@ -32,7 +32,7 @@ def initialize_session(
     update: HarnessState = {
         "session_id": state.get("session_id") or thread_id,
         "thread_id": thread_id,
-        "trace_id": str(uuid4()),
+        "trace_id": state.get("trace_id") or str(uuid4()),
         "turn_id": int(state.get("turn_id", 0)) + 1,
         "repair_count": int(state.get("repair_count", 0)),
         "reset_count": int(state.get("reset_count", 0)),
@@ -210,11 +210,11 @@ def create_intervention_selector(
     """Create bounded PASS/REPAIR/RESET graph routing for M6."""
 
     def select_intervention(state: HarnessState) -> str:
-        if state.get("guardrail_action") == "pass":
-            return "pass"
         decision = reset_policy.decide(state)
         if decision.required:
             return "reset" if state.get("reset_count", 0) < reset_policy.max_resets else "block"
+        if state.get("guardrail_action") == "pass":
+            return "pass"
         if state.get("guardrail_action") == "repair" and state.get(
             "repair_count", 0
         ) < reset_policy.max_repairs:

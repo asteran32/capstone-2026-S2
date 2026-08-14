@@ -46,7 +46,10 @@ class ConsistencyMonitor:
         contract_loader: RoleContractLoader | None = None,
         scorer: DriftScorer | None = None,
     ) -> None:
-        self._enabled = config.layer2.enabled
+        self._intervention_enabled = config.layer2.enabled
+        self._measurement_enabled = (
+            config.layer2.enabled or config.passive_measurement
+        )
         self._repair_threshold = config.thresholds.repair
         self._contract_loader = contract_loader or RoleContractLoader()
         self._scorer = scorer or WeightedDriftScorer(config.drift_score.weights)
@@ -56,7 +59,7 @@ class ConsistencyMonitor:
     ) -> ConsistencyResult:
         """Return a structured, non-mutating consistency assessment."""
 
-        if not self._enabled:
+        if not self._measurement_enabled:
             return _result(
                 valid=True,
                 indicators=_empty_indicators(),
@@ -92,7 +95,11 @@ class ConsistencyMonitor:
         violations = [f"forbidden_action:{action}" for action in forbidden]
         violations.extend(f"cross_role_action:{action}" for action in cross_role_actions)
         score = self._scorer.score(indicators)
-        action = "repair" if score >= self._repair_threshold else "pass"
+        action = (
+            "repair"
+            if self._intervention_enabled and score >= self._repair_threshold
+            else "pass"
+        )
         return _result(
             valid=not violations and not schema_errors,
             indicators=indicators,
