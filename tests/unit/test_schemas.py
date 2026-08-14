@@ -32,6 +32,7 @@ def test_output_schemas_validate() -> None:
     observation = ExperimentObservation(
         experiment_id="exp-1",
         session_id="session-1",
+        trace_id="trace-1",
         turn_id=1,
         condition="FULL",
         agent="code_reviewer",
@@ -45,6 +46,11 @@ def test_output_schemas_validate() -> None:
         latency_ms=12,
         token_input=10,
         token_output=20,
+        drift_indicators={"role_boundary_violation": 0.0},
+        model_configuration={"provider": "mock", "model_name": "test-model"},
+        random_seed=42,
+        configuration_hash="hash-1",
+        configuration_source="config/experiment.yaml",
     )
 
     assert problem.reference_solution is None

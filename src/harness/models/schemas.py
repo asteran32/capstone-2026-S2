@@ -127,6 +127,7 @@ class DriftObservation(SchemaModel):
 class ExperimentObservation(SchemaModel):
     experiment_id: str
     session_id: str
+    trace_id: str
     turn_id: int
     condition: str
     agent: str
@@ -140,6 +141,11 @@ class ExperimentObservation(SchemaModel):
     latency_ms: int
     token_input: int | None
     token_output: int | None
+    drift_indicators: dict[str, float]
+    model_configuration: dict[str, Any]
+    random_seed: int | None
+    configuration_hash: str
+    configuration_source: str
 
 
 class AgentBehaviourState(SchemaModel):
