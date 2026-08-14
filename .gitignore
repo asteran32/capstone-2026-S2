@@ -10,5 +10,8 @@ htmlcov/
 build/
 dist/
 *.egg-info/
-data/traces/*.jsonl
+data/traces/**
+!data/traces/.gitkeep
 data/checkpoints/
+data/experiments/**
+!data/experiments/.gitkeep

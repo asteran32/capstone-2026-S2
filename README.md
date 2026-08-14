@@ -57,3 +57,30 @@ For code review, pass learner code as a separate argument:
 ```
 
 Run `./.venv/bin/python scripts/run_session.py --help` for all options.
+
+## Run M9 experiments
+
+Experiment commands use the deterministic mock provider by default. Baseline
+keeps the same three-agent topology, disables role-guardrail intervention, and
+retains passive drift observations:
+
+```bash
+./.venv/bin/python scripts/run_baseline.py \
+  --repetitions 3 \
+  --output data/experiments/baseline.csv
+```
+
+Run any supported Layer 1/2/3 combination without editing graph source:
+
+```bash
+./.venv/bin/python scripts/run_ablation.py \
+  --condition L1_L2 \
+  --repetitions 3 \
+  --seed 42 \
+  --output data/experiments/l1-l2.csv
+```
+
+Supported conditions are `BASELINE`, `L1`, `L2`, `L3`, `L1_L2`, `L1_L3`,
+`L2_L3`, and `FULL`. Select `--provider openai` explicitly for real, billable
+model calls. The CSV export includes condition, trace linkage, raw drift
+indicators, model configuration, seed, and a reproducible configuration hash.
